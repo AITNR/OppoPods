@@ -23,10 +23,14 @@ import moe.chenxy.oppopods.utils.SystemApisUtils
 import moe.chenxy.oppopods.utils.SystemApisUtils.cancelAsUser
 import moe.chenxy.oppopods.utils.SystemApisUtils.notifyAsUser
 import moe.chenxy.oppopods.utils.miuiStrongToast.data.BatteryParams
+import moe.chenxy.oppopods.utils.miuiStrongToast.data.OppoPodsAction
 import moe.chenxy.oppopods.R
 
 @SuppressLint("MissingPermission")
 object MiBluetoothToastHook : YukiBaseHooker() {
+
+    // 本地记录上次发送的 ANC 模式，用于循环切换（1=关 2=降噪 3=通透）
+    private var localAncMode = 1
 
     override fun onHook() {
 
@@ -43,7 +47,6 @@ object MiBluetoothToastHook : YukiBaseHooker() {
             val miheadset_notification_RightEar = context.resources.getIdentifier("miheadset_notification_RightEar", "string", "com.xiaomi.bluetooth")
             val miheadset_notification_Disconnect = context.resources.getIdentifier("miheadset_notification_Disconnect", "string", "com.xiaomi.bluetooth")
             val system_notification_accent_color = context.resources.getIdentifier("system_notification_accent_color", "color", "android")
-
             if (bluetoothDevice == null) {
                 Log.e("OppoPods", "createPodsNotification: btDevice null")
                 return
@@ -63,7 +66,7 @@ object MiBluetoothToastHook : YukiBaseHooker() {
                     "${context.resources.getString(miheadset_notification_LeftEar)}${batteryParams.left!!.battery}%" +
                         (if (batteryParams.left!!.isCharging) "⚡" else "")
                 else ""
-                val leftToRight = if (batteryParams.left?.isConnected == true && batteryParams.right?.isConnected == true) "|" else ""
+                val leftToRight = if (batteryParams.left?.isConnected == true && batteryParams.right?.isConnected == true) " " else ""
                 val rightEar = if (batteryParams.right != null && batteryParams.right!!.isConnected)
                     "$leftToRight${context.resources.getString(miheadset_notification_RightEar)}${batteryParams.right!!.battery}%" +
                         (if (batteryParams.right!!.isCharging) "⚡ " else " ")
@@ -92,6 +95,10 @@ object MiBluetoothToastHook : YukiBaseHooker() {
                     context.resources.getString(miheadset_notification_Disconnect),
                     PendingIntent.getBroadcast(context, 0, intent, 201326592)
                 )
+                // 循环切换降噪模式：降噪 → 通透 → 关，指定 package 确保广播路由到 com.android.bluetooth 进程
+                val ancCycleIntent = Intent(OppoPodsAction.ACTION_CYCLE_ANC)
+                ancCycleIntent.setPackage("com.android.bluetooth")
+                ancCycleIntent.setIdentifier("BTHeadset$address")
                 val moduleContext = context.createPackageContext(
                     "moe.chenxy.oppopods", Context.CONTEXT_IGNORE_SECURITY
                 )
@@ -142,11 +149,32 @@ object MiBluetoothToastHook : YukiBaseHooker() {
                     }
 
 
-//                    actions {
-//                        addActionInfo {
-//                            action = createAction("key_disconnect", disconnectAction)
-//                        }
-//                    }
+                    textButton {
+                        addActionInfo {
+                            val ancAction = Notification.Action.Builder(
+                                Icon.createWithResource(context, android.R.drawable.ic_lock_silent_mode),
+                                "ANC",
+                                PendingIntent.getBroadcast(context, 1, ancCycleIntent, 201326592)
+                            ).build()
+                            action = createAction("key_anc_cycle", ancAction)
+                            actionTitle = "ANC"
+                        }
+                        addActionInfo {
+                            val disconnectLabel = context.resources.getString(miheadset_notification_Disconnect)
+                            val disconnectIntent = Intent("com.android.bluetooth.headset.notification").apply {
+                                putExtra("btData", bundle)
+                                putExtra("disconnect", "1")
+                                setIdentifier("BTHeadset$address")
+                            }
+                            val disconnectAction = Notification.Action.Builder(
+                                Icon.createWithResource(context, android.R.drawable.ic_delete),
+                                disconnectLabel,
+                                PendingIntent.getBroadcast(context, 2, disconnectIntent, 201326592)
+                            ).build()
+                            action = createAction("key_disconnect", disconnectAction)
+                            actionTitle = disconnectLabel
+                        }
+                    }
                 }
                 // AOD 息屏显示：左右耳电量拼合后注入 aodTitle
                 if (focusExtras != null) {
@@ -221,6 +249,18 @@ object MiBluetoothToastHook : YukiBaseHooker() {
                             } else if (p1?.action == "chen.action.oppopods.cancelpodsnotification") {
                                 val device = p1.getParcelableExtra("device", BluetoothDevice::class.java) as BluetoothDevice
                                 cancelNotification(device, context)
+                            } else if (p1?.action == OppoPodsAction.ACTION_CYCLE_ANC) {
+                                // 循环：降噪→通透→关，转发 ACTION_ANC_SELECT 到 com.android.bluetooth
+                                localAncMode = when (localAncMode) {
+                                    2 -> 3
+                                    3 -> 1
+                                    else -> 2
+                                }
+                                Intent(OppoPodsAction.ACTION_ANC_SELECT).apply {
+                                    putExtra("status", localAncMode)
+                                    addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
+                                    p0?.sendBroadcast(this)
+                                }
                             }
                         }
                     }
@@ -228,6 +268,7 @@ object MiBluetoothToastHook : YukiBaseHooker() {
                     val intentFilter = IntentFilter("chen.action.oppopods.sendstrongtoast")
                     intentFilter.addAction("chen.action.oppopods.updatepodsnotification")
                     intentFilter.addAction("chen.action.oppopods.cancelpodsnotification")
+                    intentFilter.addAction(OppoPodsAction.ACTION_CYCLE_ANC)
                     context.registerReceiver(broadcastReceiver, intentFilter,
                         Context.RECEIVER_EXPORTED)
                 }

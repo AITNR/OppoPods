@@ -138,6 +138,9 @@ object RfcommController {
                 val enabled = intent.getBooleanExtra("enabled", false)
                 setGameMode(enabled)
             }
+            OppoPodsAction.ACTION_CYCLE_ANC -> {
+                cycleAnc()
+            }
         }
     }
 
@@ -248,6 +251,7 @@ object RfcommController {
             this.addAction(OppoPodsAction.ACTION_GET_PODS_MAC)
             this.addAction(OppoPodsAction.ACTION_REFRESH_STATUS)
             this.addAction(OppoPodsAction.ACTION_GAME_MODE_SET)
+            this.addAction(OppoPodsAction.ACTION_CYCLE_ANC)
         }, Context.RECEIVER_EXPORTED)
 
         Intent(OppoPodsAction.ACTION_PODS_CONNECTED).apply {
@@ -417,8 +421,19 @@ object RfcommController {
         }
     }
 
+    fun cycleAnc() {
+        // 循环顺序：降噪 → 通透 → 关
+        val next = when (currentAnc) {
+            2 -> 3  // NC -> Transparency
+            3 -> 1  // Transparency -> OFF
+            else -> 2  // OFF or unknown -> NC
+        }
+        setANCMode(next)
+    }
+
     fun setANCMode(mode: Int) {
         Log.d(TAG, "setANCMode: $mode")
+        currentAnc = mode  // 乐观更新，与 AppRfcommController 保持一致
         val packet = when (mode) {
             1 -> Enums.ANC_OFF
             2 -> Enums.ANC_NOISE_CANCEL
