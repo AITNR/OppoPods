@@ -16,8 +16,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -180,9 +178,6 @@ private fun PopupContent(onMore: () -> Unit, onDone: () -> Unit) {
 
     val dialogBgColor = if (isDarkMode) Color(0xFF1A1A1A) else Color(0xFFF7F7F7)
     val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
-    val gapSmall = if (isLandscape) 6.dp else 12.dp
-    val gapLarge = if (isLandscape) 8.dp else 16.dp
-    val podStatusVerticalPadding = if (isLandscape) 8.dp else 16.dp
 
     Scaffold(containerColor = Color.Transparent) { _ ->
         OverlayDialog(
@@ -196,54 +191,131 @@ private fun PopupContent(onMore: () -> Unit, onDone: () -> Unit) {
                 onDone()
             }
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .then(if (isLandscape) Modifier.verticalScroll(rememberScrollState()) else Modifier)
-            ) {
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    PodStatus(
-                        batteryParams.value,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = podStatusVerticalPadding),
-                        compact = isLandscape
-                    )
-                }
-                Spacer(modifier = Modifier.height(gapSmall))
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    AncSwitch(
-                        ancMode.value,
-                        onAncModeChange = { setAncMode(it) },
-                        compact = isLandscape
-                    )
-                }
-                Spacer(modifier = Modifier.height(gapSmall))
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    SwitchPreference(
-                        title = stringResource(R.string.game_mode),
-                        summary = stringResource(R.string.game_mode_summary),
-                        checked = gameMode.value,
-                        onCheckedChange = { setGameMode(it) }
-                    )
-                }
-                Spacer(modifier = Modifier.height(gapLarge))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    TextButton(
-                        text = stringResource(R.string.more),
-                        onClick = onMore,
-                        modifier = Modifier.weight(1f)
-                    )
-                    TextButton(
-                        text = stringResource(R.string.done),
-                        onClick = {
-                            showDialog.value = false
-                        },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
+            if (isLandscape) {
+                LandscapePopupBody(
+                    batteryParams = batteryParams.value,
+                    ancMode = ancMode.value,
+                    gameMode = gameMode.value,
+                    onAncModeChange = ::setAncMode,
+                    onGameModeChange = ::setGameMode,
+                    onMore = onMore,
+                    onDone = { showDialog.value = false }
+                )
+            } else {
+                PortraitPopupBody(
+                    batteryParams = batteryParams.value,
+                    ancMode = ancMode.value,
+                    gameMode = gameMode.value,
+                    onAncModeChange = ::setAncMode,
+                    onGameModeChange = ::setGameMode,
+                    onMore = onMore,
+                    onDone = { showDialog.value = false }
+                )
             }
+        }
+    }
+}
+
+@Composable
+private fun PortraitPopupBody(
+    batteryParams: BatteryParams,
+    ancMode: NoiseControlMode,
+    gameMode: Boolean,
+    onAncModeChange: (NoiseControlMode) -> Unit,
+    onGameModeChange: (Boolean) -> Unit,
+    onMore: () -> Unit,
+    onDone: () -> Unit
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Card(modifier = Modifier.fillMaxWidth()) {
+            PodStatus(
+                batteryParams,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 16.dp)
+            )
+        }
+        Spacer(modifier = Modifier.height(12.dp))
+        Card(modifier = Modifier.fillMaxWidth()) {
+            AncSwitch(ancMode, onAncModeChange = onAncModeChange)
+        }
+        Spacer(modifier = Modifier.height(12.dp))
+        Card(modifier = Modifier.fillMaxWidth()) {
+            SwitchPreference(
+                title = stringResource(R.string.game_mode),
+                summary = stringResource(R.string.game_mode_summary),
+                checked = gameMode,
+                onCheckedChange = onGameModeChange
+            )
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            TextButton(
+                text = stringResource(R.string.more),
+                onClick = onMore,
+                modifier = Modifier.weight(1f)
+            )
+            TextButton(
+                text = stringResource(R.string.done),
+                onClick = onDone,
+                modifier = Modifier.weight(1f)
+            )
+        }
+    }
+}
+
+@Composable
+private fun LandscapePopupBody(
+    batteryParams: BatteryParams,
+    ancMode: NoiseControlMode,
+    gameMode: Boolean,
+    onAncModeChange: (NoiseControlMode) -> Unit,
+    onGameModeChange: (Boolean) -> Unit,
+    onMore: () -> Unit,
+    onDone: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Column(modifier = Modifier.weight(0.65f)) {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                PodStatus(
+                    batteryParams,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
+                    compact = true
+                )
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Card(modifier = Modifier.fillMaxWidth()) {
+                AncSwitch(
+                    ancMode,
+                    onAncModeChange = onAncModeChange,
+                    compact = true
+                )
+            }
+        }
+        Column(modifier = Modifier.weight(0.35f)) {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                SwitchPreference(
+                    title = stringResource(R.string.game_mode),
+                    checked = gameMode,
+                    onCheckedChange = onGameModeChange
+                )
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            TextButton(
+                text = stringResource(R.string.more),
+                onClick = onMore,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            TextButton(
+                text = stringResource(R.string.done),
+                onClick = onDone,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
     }
 }
