@@ -52,6 +52,7 @@ import moe.chenxy.oppopods.OppoPodsApp
 import moe.chenxy.oppopods.R
 import moe.chenxy.oppopods.config.ConfigManager
 import moe.chenxy.oppopods.pods.AppRfcommController
+import moe.chenxy.oppopods.pods.GameModeImplementation
 import moe.chenxy.oppopods.pods.NoiseControlMode
 import moe.chenxy.oppopods.ui.components.AppIcons
 import moe.chenxy.oppopods.ui.components.RestartScope
@@ -151,6 +152,13 @@ fun MainUI(
     val prefs = remember { context.getSharedPreferences(ConfigManager.PREFS_NAME, Context.MODE_PRIVATE) }
     val appConfig = remember { ConfigManager.refreshFromPrefs(prefs) }
     val autoGameMode = remember { mutableStateOf(prefs.getBoolean("auto_game_mode", false)) }
+    val gameModeImplementation = remember {
+        mutableStateOf(
+            GameModeImplementation.fromPreference(
+                prefs.getString(GameModeImplementation.PREF_KEY, null)
+            )
+        )
+    }
     val notificationClickAction = remember { mutableStateOf(appConfig.notificationClickAction) }
     val moreClickAction = remember { mutableStateOf(appConfig.moreClickAction) }
     val desktopIconHidden = remember { mutableStateOf(isLauncherIconHidden(context)) }
@@ -239,6 +247,10 @@ fun MainUI(
                             p1.getParcelableExtra("status", BatteryParams::class.java)!!
                     }
 
+                    OppoPodsAction.ACTION_PODS_GAME_MODE_CHANGED -> {
+                        gameMode.value = p1.getBooleanExtra("enabled", false)
+                    }
+
                     OppoPodsAction.ACTION_PODS_TRANSPARENCY_VOCAL_ENHANCEMENT_CHANGED -> {
                         transparencyVocalEnhancement.value = p1.getBooleanExtra("enabled", false)
                     }
@@ -278,6 +290,7 @@ fun MainUI(
         context.registerReceiver(broadcastReceiver, IntentFilter().apply {
             addAction(OppoPodsAction.ACTION_PODS_ANC_CHANGED)
             addAction(OppoPodsAction.ACTION_PODS_BATTERY_CHANGED)
+            addAction(OppoPodsAction.ACTION_PODS_GAME_MODE_CHANGED)
             addAction(OppoPodsAction.ACTION_PODS_TRANSPARENCY_VOCAL_ENHANCEMENT_CHANGED)
             addAction(OppoPodsAction.ACTION_PODS_CONNECTED)
             addAction(OppoPodsAction.ACTION_PODS_DISCONNECTED)
@@ -346,7 +359,11 @@ fun MainUI(
         connectingDeviceAddress = device.address
         showConnectErrorDialog = false
         showDevicePicker = true
-        appController.connect(device, autoGameMode = autoGameMode.value)
+        appController.connect(
+            device = device,
+            autoGameMode = autoGameMode.value,
+            gameModeImplementation = gameModeImplementation.value
+        )
     }
 
     fun backToDevicePicker() {
@@ -537,6 +554,26 @@ fun MainUI(
                                 onAutoGameModeChange = {
                                     autoGameMode.value = it
                                     prefs.edit().putBoolean("auto_game_mode", it).apply()
+                                    Intent(OppoPodsAction.ACTION_AUTO_GAME_MODE_CHANGED).apply {
+                                        setPackage("com.android.bluetooth")
+                                        putExtra("enabled", it)
+                                        addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
+                                        context.sendBroadcast(this)
+                                    }
+                                },
+                                gameModeImplementation = gameModeImplementation,
+                                onGameModeImplementationChange = {
+                                    gameModeImplementation.value = it
+                                    appController.setGameModeImplementation(it)
+                                    prefs.edit()
+                                        .putString(GameModeImplementation.PREF_KEY, it.preferenceValue)
+                                        .apply()
+                                    Intent(OppoPodsAction.ACTION_GAME_MODE_IMPLEMENTATION_CHANGED).apply {
+                                        setPackage("com.android.bluetooth")
+                                        putExtra(GameModeImplementation.PREF_KEY, it.preferenceValue)
+                                        addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
+                                        context.sendBroadcast(this)
+                                    }
                                 },
                                 notificationClickAction = notificationClickAction,
                                 onNotificationClickActionChange = {

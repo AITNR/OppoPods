@@ -14,6 +14,7 @@ import android.media.AudioManager
 import android.media.MediaRoute2Info
 import android.media.MediaRouter2
 import android.media.RouteDiscoveryPreference
+import android.os.SystemClock
 import moe.chenxy.oppopods.hook.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -62,6 +63,9 @@ object RfcommController {
     private var currentAnc: Int = 1
     private var currentGameMode: Boolean = false
     private var currentTransparencyVocalEnhancement: Boolean = false
+    private var autoGameModeEnabled: Boolean = false
+    private var gameModeImplementation: GameModeImplementation = GameModeImplementation.STANDARD
+    private var lastGameModeStatusUpdateMs: Long = 0L
     // Adaptive模式状态缓存，通过广播同步确保跨进程实时一致，避免 SharedPreferences 跨进程缓存导致读取过时值
     private var adaptiveModeEnabled: Boolean = true
     private var lastKnownCaseBattery: Int = 0
@@ -168,6 +172,16 @@ object RfcommController {
             OppoPodsAction.ACTION_GAME_MODE_SET -> {
                 val enabled = intent.getBooleanExtra("enabled", false)
                 setGameMode(enabled)
+            }
+            OppoPodsAction.ACTION_AUTO_GAME_MODE_CHANGED -> {
+                autoGameModeEnabled = intent.getBooleanExtra("enabled", autoGameModeEnabled)
+                Log.d(TAG, "Auto game mode synced: $autoGameModeEnabled")
+            }
+            OppoPodsAction.ACTION_GAME_MODE_IMPLEMENTATION_CHANGED -> {
+                gameModeImplementation = GameModeImplementation.fromPreference(
+                    intent.getStringExtra(GameModeImplementation.PREF_KEY)
+                )
+                Log.d(TAG, "Game mode implementation synced: ${gameModeImplementation.preferenceValue}")
             }
             OppoPodsAction.ACTION_TRANSPARENCY_VOCAL_ENHANCEMENT_SET -> {
                 val enabled = intent.getBooleanExtra("enabled", false)
@@ -345,7 +359,13 @@ object RfcommController {
         cachedDeviceName = device.name ?: ""
         // 初始化 Adaptive 模式状态缓存，从 SharedPreferences 读取当前值
         adaptiveModeEnabled = mPrefs.getBoolean("adaptive_mode", true)
+        autoGameModeEnabled = mPrefs.getBoolean("auto_game_mode", false)
+        gameModeImplementation = GameModeImplementation.fromPreference(
+            mPrefs.getString(GameModeImplementation.PREF_KEY, null)
+        )
         Log.d(TAG, "Adaptive mode initial: $adaptiveModeEnabled")
+        Log.d(TAG, "Auto game mode initial: $autoGameModeEnabled")
+        Log.d(TAG, "Game mode implementation initial: ${gameModeImplementation.preferenceValue}")
 
         if (!receiverRegistered) {
             context.registerReceiver(broadcastReceiver, IntentFilter().apply {
@@ -353,6 +373,8 @@ object RfcommController {
                 this.addAction(OppoPodsAction.ACTION_PODS_UI_INIT)
                 this.addAction(OppoPodsAction.ACTION_REFRESH_STATUS)
                 this.addAction(OppoPodsAction.ACTION_GAME_MODE_SET)
+                this.addAction(OppoPodsAction.ACTION_AUTO_GAME_MODE_CHANGED)
+                this.addAction(OppoPodsAction.ACTION_GAME_MODE_IMPLEMENTATION_CHANGED)
                 this.addAction(OppoPodsAction.ACTION_TRANSPARENCY_VOCAL_ENHANCEMENT_SET)
                 this.addAction(OppoPodsAction.ACTION_CYCLE_ANC)
                 this.addAction(OppoPodsAction.ACTION_ADAPTIVE_MODE_CHANGED)
@@ -425,11 +447,10 @@ object RfcommController {
                 startPacketReader(newSocket.inputStream)
 
                 delay(300)
-                queryStatus()
+                sendStatusQueryPackets(immediateReconnect = false)
 
-                if (mPrefs.getBoolean("auto_game_mode", false)) {
-                    delay(100)
-                    sendPacketSafe(Enums.GAME_MODE_ON, "auto game mode")
+                if (autoGameModeEnabled) {
+                    enableGameModeOnConnect()
                 }
             } catch (e: IOException) {
                 Log.e(TAG, "RFCOMM connect failed", e)
@@ -554,11 +575,18 @@ object RfcommController {
         }
 
         // Try parse as batch query response for game mode (Cmd=0x810D)
-        val gameModeResult = GameModeParser.parse(packet)
+        val gameModeResult = GameModeParser.parse(packet, gameModeImplementation)
         if (gameModeResult != null) {
             Log.d(TAG, "Game mode received: $gameModeResult")
+            lastGameModeStatusUpdateMs = SystemClock.elapsedRealtime()
             currentGameMode = gameModeResult
             changeUIGameModeStatus(gameModeResult)
+            return
+        }
+
+        val setFeatureResult = SwitchFeatureSetParser.parse(packet)
+        if (setFeatureResult != null) {
+            Log.d(TAG, "Switch feature response: status=${setFeatureResult.status}, value=${setFeatureResult.value}")
             return
         }
 
@@ -616,9 +644,38 @@ object RfcommController {
     fun setGameMode(enabled: Boolean) {
         Log.d(TAG, "setGameMode: $enabled")
         currentGameMode = enabled
-        val packet = if (enabled) Enums.GAME_MODE_ON else Enums.GAME_MODE_OFF
         CoroutineScope(Dispatchers.IO).launch {
-            sendPacketSafe(packet, "game mode control")
+            sendGameModePackets(enabled, "game mode control")
+        }
+    }
+
+    private suspend fun enableGameModeOnConnect() {
+        delay(500)
+        repeat(3) { attempt ->
+            if (!isConnected || mContext == null) return
+
+            val attemptStartedMs = SystemClock.elapsedRealtime()
+            Log.d(TAG, "Auto game mode: enabling after connect, attempt=${attempt + 1}, implementation=$gameModeImplementation")
+            currentGameMode = true
+            changeUIGameModeStatus(true)
+            sendGameModePackets(true, "auto game mode")
+
+            delay(300)
+            if (!isConnected) return
+            sendPacketSafe(Enums.QUERY_STATUS)
+
+            delay(if (attempt == 0) 700 else 1_500)
+            if (lastGameModeStatusUpdateMs >= attemptStartedMs && currentGameMode) {
+                return
+            }
+            Log.d(TAG, "Auto game mode: attempt ${attempt + 1} did not verify, retrying")
+        }
+    }
+
+    private suspend fun sendGameModePackets(enabled: Boolean, requestReason: String? = null) {
+        Enums.gameModePackets(enabled, gameModeImplementation).forEachIndexed { index, packet ->
+            if (index > 0) delay(120)
+            sendPacketSafe(packet, if (index == 0) requestReason else null)
         }
     }
 
@@ -677,13 +734,17 @@ object RfcommController {
      */
     fun queryStatus(immediateReconnect: Boolean = true) {
         CoroutineScope(Dispatchers.IO).launch {
-            val reason = if (immediateReconnect) "status query" else null
-            sendPacketSafe(Enums.QUERY_STATUS, reason)
-            delay(50)
-            sendPacketSafe(Enums.QUERY_BATTERY, reason)
-            delay(50)
-            sendPacketSafe(Enums.QUERY_ANC, reason)
+            sendStatusQueryPackets(immediateReconnect)
         }
+    }
+
+    private suspend fun sendStatusQueryPackets(immediateReconnect: Boolean = true) {
+        val reason = if (immediateReconnect) "status query" else null
+        sendPacketSafe(Enums.QUERY_STATUS, reason)
+        delay(50)
+        sendPacketSafe(Enums.QUERY_BATTERY, reason)
+        delay(50)
+        sendPacketSafe(Enums.QUERY_ANC, reason)
     }
 
     fun disconnectAudio(context: Context, device: BluetoothDevice?) {
