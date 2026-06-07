@@ -744,13 +744,22 @@ object RfcommController {
             return
         }
 
-        // Try parse as batch query response for game mode (Cmd=0x810D)
-        val gameModeResult = GameModeParser.parse(packet, gameModeImplementation)
-        if (gameModeResult != null) {
-            Log.d(TAG, "Game mode received: $gameModeResult")
-            lastGameModeStatusUpdateMs = SystemClock.elapsedRealtime()
-            currentGameMode = gameModeResult
-            changeUIGameModeStatus(gameModeResult)
+        // Try parse as batch query response for switch features (Cmd=0x810D).
+        val switchFeatureStatus = GameModeParser.parseStatus(packet)
+        if (switchFeatureStatus != null) {
+            val gameModeResult = switchFeatureStatus.enabledFor(gameModeImplementation)
+            if (gameModeResult != null) {
+                Log.d(TAG, "Game mode received: $gameModeResult")
+                lastGameModeStatusUpdateMs = SystemClock.elapsedRealtime()
+                currentGameMode = gameModeResult
+                changeUIGameModeStatus(gameModeResult)
+            }
+            val dualDeviceConnectionResult = switchFeatureStatus.dualDeviceConnectionEnabled
+            if (dualDeviceConnectionResult != null) {
+                Log.d(TAG, "Dual-device connection received: $dualDeviceConnectionResult")
+                currentDualDeviceConnection = dualDeviceConnectionResult
+                changeUIDualDeviceConnectionStatus(dualDeviceConnectionResult)
+            }
             return
         }
 

@@ -579,7 +579,8 @@ object GameModeParser {
 
     data class Status(
         val mainEnabled: Boolean?,
-        val lowLatencyEnabled: Boolean?
+        val lowLatencyEnabled: Boolean?,
+        val dualDeviceConnectionEnabled: Boolean? = null
     ) {
         fun enabledFor(implementation: GameModeImplementation): Boolean? {
             return when (implementation) {
@@ -612,16 +613,18 @@ object GameModeParser {
 
         var mainEnabled: Boolean? = null
         var lowLatencyEnabled: Boolean? = null
+        var dualDeviceConnectionEnabled: Boolean? = null
         for (i in payloadStart until minOf(payloadStart + payLen - 1, data.size - 1)) {
             val value = data[i + 1].toInt() and 0xFF
             if (value != 0x00 && value != 0x01) continue
             when (data[i].toInt() and 0xFF) {
                 GameModeFeature.MAIN -> mainEnabled = value == 0x01
                 GameModeFeature.LOW_LATENCY -> lowLatencyEnabled = value == 0x01
+                GameModeFeature.DUAL_DEVICE_CONNECTION -> dualDeviceConnectionEnabled = value == 0x01
             }
         }
-        return if (mainEnabled != null || lowLatencyEnabled != null) {
-            Status(mainEnabled, lowLatencyEnabled)
+        return if (mainEnabled != null || lowLatencyEnabled != null || dualDeviceConnectionEnabled != null) {
+            Status(mainEnabled, lowLatencyEnabled, dualDeviceConnectionEnabled)
         } else {
             null
         }
@@ -636,6 +639,7 @@ object GameModeParser {
 
         var mainEnabled: Boolean? = null
         var lowLatencyEnabled: Boolean? = null
+        var dualDeviceConnectionEnabled: Boolean? = null
         for (j in 0 until count) {
             val index = payloadStart + 2 + j * 2
             val featureId = data[index].toInt() and 0xFF
@@ -643,10 +647,11 @@ object GameModeParser {
             when (featureId) {
                 GameModeFeature.MAIN -> mainEnabled = enabled
                 GameModeFeature.LOW_LATENCY -> lowLatencyEnabled = enabled
+                GameModeFeature.DUAL_DEVICE_CONNECTION -> dualDeviceConnectionEnabled = enabled
             }
         }
-        return if (mainEnabled != null || lowLatencyEnabled != null) {
-            Status(mainEnabled, lowLatencyEnabled)
+        return if (mainEnabled != null || lowLatencyEnabled != null || dualDeviceConnectionEnabled != null) {
+            Status(mainEnabled, lowLatencyEnabled, dualDeviceConnectionEnabled)
         } else {
             null
         }
