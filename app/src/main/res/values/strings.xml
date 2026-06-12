@@ -72,6 +72,7 @@
     <string name="import_melody_images_summary">Import model images from HeyTap Headset</string>
     <string name="import_melody_images_hint">Please connect the earphones once in HeyTap Headset first.</string>
     <string name="import_melody_images_empty">No HeyTap Headset model images found.</string>
+    <string name="import_melody_images_root_required">Please check ROOT permission.</string>
     <string name="import_melody_images_action">Import All</string>
     <string name="theme_title">Theme</string>
     <string name="theme_follow_system">Follow System</string>

@@ -639,6 +639,7 @@ private fun MelodyImageImportDialog(
 ) {
     var candidates by remember(show) { mutableStateOf<List<MelodyImageCandidate>>(emptyList()) }
     var selectedCandidate by remember(show) { mutableStateOf<MelodyImageCandidate?>(null) }
+    var hasRootAccess by remember(show) { mutableStateOf(true) }
     var loading by remember(show) { mutableStateOf(false) }
     var importing by remember(show) { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -646,7 +647,12 @@ private fun MelodyImageImportDialog(
     LaunchedEffect(show) {
         if (!show) return@LaunchedEffect
         loading = true
-        candidates = withContext(Dispatchers.IO) { RootManager.scanMelodyImageCandidates() }
+        hasRootAccess = withContext(Dispatchers.IO) { RootManager.hasRootAccess() }
+        candidates = if (hasRootAccess) {
+            withContext(Dispatchers.IO) { RootManager.scanMelodyImageCandidates() }
+        } else {
+            emptyList()
+        }
         selectedCandidate = candidates.firstOrNull()
         loading = false
     }
@@ -671,6 +677,13 @@ private fun MelodyImageImportDialog(
             ) {
                 InfiniteProgressIndicator()
             }
+        } else if (!hasRootAccess) {
+            Text(
+                text = stringResource(R.string.import_melody_images_root_required),
+                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                style = MiuixTheme.textStyles.body2,
+                modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
+            )
         } else if (candidates.isEmpty()) {
             Text(
                 text = stringResource(R.string.import_melody_images_empty),

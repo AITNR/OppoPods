@@ -73,6 +73,7 @@
     <string name="import_melody_images_summary">从欢律导入耳机型号图片</string>
     <string name="import_melody_images_hint">请提前在欢律中连接一次耳机。</string>
     <string name="import_melody_images_empty">未找到欢律耳机型号图片。</string>
+    <string name="import_melody_images_root_required">请检查 ROOT 权限。</string>
     <string name="import_melody_images_action">一键导入</string>
     <string name="theme_title">主题</string>
     <string name="theme_follow_system">跟随系统</string>

@@ -42,6 +42,10 @@ object RootManager {
         }.getOrDefault(false)
     }
 
+    fun hasRootAccess(): Boolean {
+        return runRootText("echo yes")?.trim() == "yes"
+    }
+
     fun scanMelodyImageCandidates(): List<MelodyImageCandidate> {
         val modelDir = melodyModelDirs.firstOrNull { dir ->
             dir.matches(melodyDirPathRegex) && runRootText("test -d ${dir.shellQuote()} && echo yes")?.trim() == "yes"
