@@ -59,6 +59,7 @@
 - [HyperPods](https://github.com/Art-Chen/HyperPods) by Art_Chen — 原始项目
 - [Miuix](https://github.com/YuKongA/miuix) — HyperOS 风格 Compose UI 组件
 - [OPPOPods](https://github.com/Leaf-lsgtky/OppoPods) - by Leaf-lsgtky — 分支基础项目
+- [OPPOPods](https://github.com/1812z/OppoPods) —  1812z/OppoPods
 - 本版本为 ROG Concerto 2 适配的分支版本
 
 ### 许可证
