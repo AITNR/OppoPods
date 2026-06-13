@@ -3,9 +3,9 @@
 
 <img src="https://github.com/user-attachments/assets/e8a3df6b-6e67-485a-ae1c-018ac24e87d4" width="120" height="120" style="border-radius: 24px;" alt="HyperIsland Icon"/>
 
-# OPPOPods
+# OPPOPods - ROG Concerto 2 Edition
 
-**为 HyperOS 设备提供系统级 OPPO 耳机控制**
+**为 HyperOS 设备提供系统级 OPPO 耳机控制（ROG Concerto 2 分支版本）**
 
 [![GitHub Release](https://img.shields.io/github/v/release/1812z/OppoPods?style=flat-square&logo=github&color=black)](https://github.com/1812z/OppoPods/releases)
 ![Downloads](https://img.shields.io/github/downloads/1812z/OppoPods/total?style=flat-square)
@@ -19,14 +19,17 @@
 </div>
 
 
-为小米 HyperOS 设备提供系统级 OPPO 耳机控制的 Xposed 模块。
+为小米 HyperOS 设备提供系统级 OPPO 耳机控制的 Xposed 模块。本版本是基于原项目的分支，专为 ROG Concerto 2 耳机进行了适配和优化。
 
 
 ### 耳机功能
 
 - **降噪控制** — 在关闭 / 降噪 / 自适应 / 通透模式之间切换
+- **环境音控制** — 直接控制和调整环境音设置
 - **游戏模式** — 低延迟音频开关，支持连接时自动开启
-- **电量显示** — 实时显示左耳、右耳、充电盒电量
+- **ROG Concerto 2 适配** — 完全支持 ROG Concerto 2 耳机的所有特性
+
+> **注：** 当前版本在 ROG Concerto 2 上无法显示电量信息
 
 ### 澎湃集成
 - **超级岛** — 支持官方超级岛或模块内建超级岛
@@ -55,7 +58,8 @@
 
 - [HyperPods](https://github.com/Art-Chen/HyperPods) by Art_Chen — 原始项目
 - [Miuix](https://github.com/YuKongA/miuix) — HyperOS 风格 Compose UI 组件
-- [OPPOPods](https://github.com/Leaf-lsgtky/OppoPods) - by Leaf-lsgtky
+- [OPPOPods](https://github.com/Leaf-lsgtky/OppoPods) - by Leaf-lsgtky — 分支基础项目
+- 本版本为 ROG Concerto 2 适配的分支版本
 
 ### 许可证
 
