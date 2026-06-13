@@ -765,3 +765,195 @@ object SwitchFeatureSetParser {
         return null
     }
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// Airoha RACE BLE GATT Protocol — for ROG Cetra TWS SpeedNova
+// ═══════════════════════════════════════════════════════════════════
+
+/**
+ * BLE GATT service UUIDs for the Airoha RACE custom service.
+ * These are used by ROG Cetra TWS and other Airoha-chipset earbuds.
+ */
+object RaceBleUuids {
+    /** TX characteristic — write commands to earbuds */
+    const val TX = "43484152-2DAB-3241-6972-6F6861424C45"
+    /** RX characteristic — receive notifications from earbuds */
+    const val RX = "43484152-2DAB-3141-6972-6F6861424C45"
+    /** Standard Battery Service (BAS) — fallback battery read without pairing */
+    const val BAS_LEVEL = "00002a19-0000-1000-8000-00805f9b34fb"
+}
+
+/**
+ * RACE protocol packet builder and constants.
+ *
+ * Packet format: [CH(1B), RT(1B), Len(2B LE), RID(2B LE), Payload...]
+ *   CH  = 0x05 (fixed channel)
+ *   RT  = request type: 0x5A (with response) or 0x5C (no response)
+ *   Len = length of (RID + Payload) in bytes, little-endian
+ *   RID = request ID, little-endian, used to match responses
+ */
+object RacePacket {
+    const val CH = 0x05
+    const val RT_CMD = 0x5A       // Command expecting response
+    const val RT_NO_RESP = 0x5C   // Command without response
+    const val RT_NOTIFY = 0x5B    // Response / notification
+    const val RT_DATA = 0x5D      // Data response (e.g. battery)
+
+    /** Build a RACE packet. [rid] is the request ID, [payload] is the command data. */
+    fun build(rid: Int, payload: ByteArray, expectResponse: Boolean = true): ByteArray {
+        val rt = if (expectResponse) RT_CMD else RT_NO_RESP
+        val bodyLen = 2 + payload.size  // RID(2) + payload
+        return byteArrayOf(
+            CH.toByte(),
+            rt.toByte(),
+            (bodyLen and 0xFF).toByte(),
+            ((bodyLen shr 8) and 0xFF).toByte(),
+            (rid and 0xFF).toByte(),
+            ((rid shr 8) and 0xFF).toByte()
+        ) + payload
+    }
+
+    /** Extract the RID from a raw packet buffer. Returns -1 if invalid. */
+    fun extractRid(data: ByteArray): Int {
+        if (data.size < 6) return -1
+        return (data[4].toInt() and 0xFF) or ((data[5].toInt() and 0xFF) shl 8)
+    }
+
+    /** Extract the payload after the RID (starting at byte 6). Returns empty array if too short. */
+    fun extractPayload(data: ByteArray): ByteArray {
+        if (data.size <= 6) return byteArrayOf()
+        return data.copyOfRange(6, data.size)
+    }
+
+    /** Get the response type byte (RT field at offset 1). */
+    fun getResponseType(data: ByteArray): Int {
+        if (data.size < 2) return -1
+        return data[1].toInt() and 0xFF
+    }
+}
+
+/**
+ * ANC mode values for the RACE protocol (ROG Cetra TWS).
+ * Used in both SET and GET responses.
+ */
+object RaceAncValue {
+    const val STRONG = 1       // 降噪-强
+    const val MEDIUM = 2       // 降噪-中
+    const val LIGHT = 3        // 降噪-轻
+    const val ADAPTIVE = 4     // 自适应降噪
+    const val TRANSPARENCY = 9 // 环境音
+
+    /** Map RACE ANC value to internal NoiseControlMode */
+    fun toNoiseControlMode(value: Int): NoiseControlMode = when (value) {
+        STRONG -> NoiseControlMode.NOISE_CANCELLATION_DEEP
+        MEDIUM -> NoiseControlMode.NOISE_CANCELLATION_MEDIUM
+        LIGHT -> NoiseControlMode.NOISE_CANCELLATION_LIGHT
+        ADAPTIVE -> NoiseControlMode.ADAPTIVE
+        TRANSPARENCY -> NoiseControlMode.TRANSPARENCY
+        else -> NoiseControlMode.OFF
+    }
+
+    /** Map internal NoiseControlMode to RACE ANC value */
+    fun fromNoiseControlMode(mode: NoiseControlMode): Int = when (mode) {
+        NoiseControlMode.NOISE_CANCELLATION -> STRONG
+        NoiseControlMode.NOISE_CANCELLATION_DEEP -> STRONG
+        NoiseControlMode.NOISE_CANCELLATION_MEDIUM -> MEDIUM
+        NoiseControlMode.NOISE_CANCELLATION_LIGHT -> LIGHT
+        NoiseControlMode.NOISE_CANCELLATION_SMART -> MEDIUM
+        NoiseControlMode.ADAPTIVE -> ADAPTIVE
+        NoiseControlMode.TRANSPARENCY -> TRANSPARENCY
+        NoiseControlMode.OFF -> 0
+    }
+}
+
+/** RACE protocol command request IDs. */
+object RaceCmd {
+    /** Query current ANC mode. Payload: [0x05, 0x00] */
+    const val ANC_GET = 0x0901
+    /** Set ANC mode. Payload: [0x00, 0x0A, mode, 0x00, 0x01] */
+    const val ANC_SET = 0x0E06
+    /** Disable ANC (off). Payload: [0x00, 0x0B, 0x01] (uses ANC_SET RID) */
+    const val ANC_OFF = 0x0E06
+    /** Query battery for one side. Payload: [agent] where 1=Left, 2=Right */
+    const val BATTERY_GET = 0x0CD6
+}
+
+/** Pre-built RACE command packets for ROG Cetra TWS. */
+object RaceEnums {
+    /** Query current ANC mode */
+    fun ancQuery(): ByteArray =
+        RacePacket.build(RaceCmd.ANC_GET, byteArrayOf(0x05, 0x00))
+
+    /** Set ANC to a specific mode (1-4 or 9) */
+    fun ancSet(mode: Int): ByteArray =
+        RacePacket.build(RaceCmd.ANC_SET, byteArrayOf(0x00, 0x0A, mode.toByte(), 0x00, 0x01))
+
+    /** Turn off ANC */
+    fun ancOff(): ByteArray =
+        RacePacket.build(RaceCmd.ANC_OFF, byteArrayOf(0x00, 0x0B, 0x01))
+
+    /** Query battery for one side: agent 1=Left, 2=Right */
+    fun batteryQuery(agent: Int): ByteArray =
+        RacePacket.build(RaceCmd.BATTERY_GET, byteArrayOf(agent.toByte()))
+}
+
+/**
+ * Parser for RACE ANC GET response (RID=0x0901).
+ *
+ * Response payload (after RID): [0x00=status_ok, mode_value, ...]
+ * If payload[0] == 0, then payload[1] is the current ANC mode.
+ */
+object RaceAncParser {
+    fun parseAncResponse(data: ByteArray): Int? {
+        val payload = RacePacket.extractPayload(data)
+        if (payload.size < 2) return null
+        if (payload[0].toInt() and 0xFF != 0x00) return null
+        val mode = payload[1].toInt() and 0xFF
+        return mode.takeIf { it in 1..9 }
+    }
+
+    fun parseAncSetResponse(data: ByteArray): Boolean {
+        val payload = RacePacket.extractPayload(data)
+        return payload.isNotEmpty() && (payload[0].toInt() and 0xFF) == 0x00
+    }
+}
+
+/**
+ * Parser for RACE battery response (RID=0x0CD6, RT=0x5D).
+ *
+ * Raw packet: d[8] is the battery percentage (255 = not available).
+ * The agent (side) can be determined from the payload byte after RID.
+ */
+object RaceBatteryParser {
+    data class BatteryResult(
+        val left: Int?,
+        val right: Int?
+    )
+
+    /**
+     * Parse a single battery response packet.
+     * Returns Pair(side, level) where side is "L" or "R" and level is 0-100.
+     * Returns null if invalid or not available.
+     */
+    fun parseSingleResponse(data: ByteArray): Pair<String, Int>? {
+        if (data.size < 9) return null
+        val rt = data[1].toInt() and 0xFF
+        if (rt != RacePacket.RT_DATA) return null
+
+        // Payload starts at byte 6: [RID_Lo, RID_Hi, agent, ...padding..., battery]
+        val payload = RacePacket.extractPayload(data)
+        if (payload.size < 3) return null
+
+        val agent = payload[0].toInt() and 0xFF
+        val battery = data[8].toInt() and 0xFF
+
+        if (battery == 255) return null
+
+        val side = when (agent) {
+            1 -> "L"
+            2 -> "R"
+            else -> return null
+        }
+        return Pair(side, battery)
+    }
+}

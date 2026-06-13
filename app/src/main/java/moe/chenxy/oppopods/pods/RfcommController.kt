@@ -169,6 +169,9 @@ object RfcommController {
     }
 
     fun handleUIEvent(intent: Intent) {
+        // Guard: ignore UI events if no OPPO device is connected
+        if (!isConnected || !::mDevice.isInitialized) return
+
         when (intent.action) {
             OppoPodsAction.ACTION_PODS_UI_INIT -> {
                 markAppUiActive()

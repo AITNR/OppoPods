@@ -43,6 +43,7 @@
     <string name="noise_cancellation_light">Light</string>
     <string name="noise_cancellation_medium">Medium</string>
     <string name="noise_cancellation_deep">Deep</string>
+    <string name="noise_cancellation_strong">Strong</string>
     <string name="transparency_title">Transparency</string>
     <string name="transparency_vocal_enhancement">Vocal Enhancement</string>
     <string name="transparency_vocal_enhancement_summary">Enhance voices in Transparency mode</string>

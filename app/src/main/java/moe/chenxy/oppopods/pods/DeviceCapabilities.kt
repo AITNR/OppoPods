@@ -4,6 +4,9 @@ import moe.chenxy.oppopods.config.ConfigManager
 
 private val ADAPTIVE_SUPPORTED_DEVICES = arrayOf(
     "OPPO Enco Free4",
+    "ROG Cetra",
+    "CTWSN",
+    "SpeedNova",
 )
 
 private val SPATIAL_AUDIO_SUPPORTED_DEVICES = arrayOf(
@@ -15,10 +18,19 @@ private val SPATIAL_SOUND_SWITCH_SUPPORTED_DEVICES = arrayOf(
     "OPPO Enco Air5",
 )
 
+/** Devices that use BLE GATT (Airoha RACE protocol) instead of RFCOMM. */
+private val BLE_RACE_DEVICES = arrayOf(
+    "ROG Cetra",
+    "CTWSN",
+    "SpeedNova",
+    "R55",
+)
+
 data class DeviceCapabilities(
     val adaptiveSupported: Boolean,
     val spatialAudioSupported: Boolean,
     val spatialSoundSwitchSupported: Boolean,
+    val isBleDevice: Boolean = false,
 )
 
 fun detectDeviceCapabilities(
@@ -40,6 +52,7 @@ fun detectDeviceCapabilities(
             override = spatialSoundSwitchOverride,
             autoDetected = isSpatialSoundSwitchSupportedByName(deviceName),
         ),
+        isBleDevice = isBleRaceDevice(deviceName),
     )
 }
 
@@ -73,4 +86,11 @@ private fun isDeviceInCapabilityList(deviceName: String, supportedDevices: Array
         val normalizedSupportedDevice = normalizeDeviceName(supportedDevice)
         normalizedSupportedDevice in normalizedName || normalizedName in normalizedSupportedDevice
     }
+}
+
+/**
+ * Check if the device uses BLE GATT (Airoha RACE protocol) instead of RFCOMM.
+ */
+fun isBleRaceDevice(deviceName: String): Boolean {
+    return isDeviceInCapabilityList(deviceName, BLE_RACE_DEVICES)
 }

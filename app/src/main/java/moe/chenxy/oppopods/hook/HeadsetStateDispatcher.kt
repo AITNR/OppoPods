@@ -11,6 +11,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.os.Handler
 import moe.chenxy.oppopods.BuildConfig
+import moe.chenxy.oppopods.pods.BleController
 import moe.chenxy.oppopods.pods.RfcommController
 import moe.chenxy.oppopods.utils.SystemApisUtils.setIconVisibility
 import moe.chenxy.oppopods.utils.miuiStrongToast.data.OppoPodsAction
@@ -36,18 +37,29 @@ object HeadsetStateDispatcher : HookContext() {
                 return@hookAfter
             }
             handler.post {
-                Log.d("OppoPods", "A2DP Connection State: $currState, isOppoPod ${isOppoPod(device)}")
+                Log.d("OppoPods", "A2DP Connection: $currState, isOppoPod=${isOppoPod(device)}, isRogCetra=${BleController.isRogCetra(device)}")
                 val context = instance as ContextWrapper
                 registerAppRequestReceiver(context)
-                if (!isOppoPod(device)) return@post
+
+                val isRog = BleController.isRogCetra(device)
+                val isOppo = isOppoPod(device)
+                if (!isRog && !isOppo) return@post
 
                 val statusBarManager = context.getSystemService("statusbar") as StatusBarManager
                 if (currState == BluetoothHeadset.STATE_CONNECTED) {
                     statusBarManager.setIconVisibility("wireless_headset", true)
-                    RfcommController.connectPod(context, device, prefs)
+                    if (isRog) {
+                        BleController.connectPod(context, device, prefs)
+                    } else {
+                        RfcommController.connectPod(context, device, prefs)
+                    }
                 } else if (currState == BluetoothHeadset.STATE_DISCONNECTING || currState == BluetoothHeadset.STATE_DISCONNECTED) {
                     statusBarManager.setIconVisibility("wireless_headset", false)
-                    RfcommController.disconnectedPod(context, device)
+                    if (isRog) {
+                        BleController.disconnectedPod(context, device)
+                    } else {
+                        RfcommController.disconnectedPod(context, device)
+                    }
                 }
             }
         }
@@ -68,13 +80,23 @@ object HeadsetStateDispatcher : HookContext() {
                     }
                     OppoPodsAction.ACTION_CONNECT_POD_REQUEST -> {
                         val device = intent.getParcelableExtra("device", BluetoothDevice::class.java) ?: return
-                        Log.d("OppoPods", "connect request from app device=${device.name}/${device.address}")
-                        RfcommController.connectPod(context, device, prefs, appRequested = true)
+                        val isRog = BleController.isRogCetra(device)
+                        Log.d("OppoPods", "connect request from app device=${device.name}/${device.address} isRog=$isRog")
+                        if (isRog) {
+                            BleController.connectPod(context, device, prefs, appRequested = true)
+                        } else {
+                            RfcommController.connectPod(context, device, prefs, appRequested = true)
+                        }
                     }
                     OppoPodsAction.ACTION_DISCONNECT_POD_REQUEST -> {
                         val device = intent.getParcelableExtra("device", BluetoothDevice::class.java) ?: return
-                        Log.d("OppoPods", "disconnect request from app device=${device.name}/${device.address}")
-                        RfcommController.disconnectedPod(context, device)
+                        val isRog = BleController.isRogCetra(device)
+                        Log.d("OppoPods", "disconnect request from app device=${device.name}/${device.address} isRog=$isRog")
+                        if (isRog) {
+                            BleController.disconnectedPod(context, device)
+                        } else {
+                            RfcommController.disconnectedPod(context, device)
+                        }
                     }
                 }
             }

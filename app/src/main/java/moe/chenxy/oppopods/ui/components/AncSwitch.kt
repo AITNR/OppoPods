@@ -46,6 +46,14 @@ import top.yukonga.miuix.kmp.utils.pressable
 
 private const val ANIM_DURATION = 300
 
+/**
+ * Describes a noise cancellation intensity mode for the sub-tab row.
+ */
+data class NcIntensityMode(
+    val mode: NoiseControlMode,
+    val label: String
+)
+
 @Composable
 fun AncSwitch(
     ancStatus: NoiseControlMode,
@@ -53,7 +61,8 @@ fun AncSwitch(
     compact: Boolean = false,
     adaptiveModeEnabled: Boolean = true,
     transparencyVocalEnhancement: Boolean = false,
-    onTransparencyVocalEnhancementChange: ((Boolean) -> Unit)? = null
+    onTransparencyVocalEnhancementChange: ((Boolean) -> Unit)? = null,
+    noiseCancellationModes: List<NcIntensityMode>? = null
 ) {
     val verticalPadding = if (compact) 8.dp else 16.dp
     val tabMinWidth = 0.dp
@@ -112,22 +121,20 @@ fun AncSwitch(
         }
 
         if (ancStatus.isNoiseCancellation()) {
-            val modes = listOf(
-                NoiseControlMode.NOISE_CANCELLATION_SMART,
-                NoiseControlMode.NOISE_CANCELLATION_LIGHT,
-                NoiseControlMode.NOISE_CANCELLATION_MEDIUM,
-                NoiseControlMode.NOISE_CANCELLATION_DEEP
+            // Use provided custom modes or default OPPO 4-level modes
+            val defaultModes = listOf(
+                NcIntensityMode(NoiseControlMode.NOISE_CANCELLATION_SMART, stringResource(R.string.noise_cancellation_smart)),
+                NcIntensityMode(NoiseControlMode.NOISE_CANCELLATION_LIGHT, stringResource(R.string.noise_cancellation_light)),
+                NcIntensityMode(NoiseControlMode.NOISE_CANCELLATION_MEDIUM, stringResource(R.string.noise_cancellation_medium)),
+                NcIntensityMode(NoiseControlMode.NOISE_CANCELLATION_DEEP, stringResource(R.string.noise_cancellation_deep))
             )
-            val tabs = listOf(
-                stringResource(R.string.noise_cancellation_smart),
-                stringResource(R.string.noise_cancellation_light),
-                stringResource(R.string.noise_cancellation_medium),
-                stringResource(R.string.noise_cancellation_deep)
-            )
+            val activeModes = noiseCancellationModes ?: defaultModes
+            val tabs = activeModes.map { it.label }
+            val selectedTabIndex = activeModes.indexOfFirst { it.mode == ancStatus }.takeIf { it >= 0 } ?: 0
             ResponsiveAncTabRow(
                 tabs = tabs,
-                selectedTabIndex = modes.indexOf(ancStatus).takeIf { it >= 0 } ?: 0,
-                onTabSelected = { onAncModeChange(modes[it]) },
+                selectedTabIndex = selectedTabIndex,
+                onTabSelected = { onAncModeChange(activeModes[it].mode) },
                 compact = compact,
                 minWidth = tabMinWidth,
                 tabMaxWidth = tabMaxWidth,

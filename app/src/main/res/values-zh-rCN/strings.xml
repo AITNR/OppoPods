@@ -44,6 +44,7 @@
     <string name="noise_cancellation_light">轻度</string>
     <string name="noise_cancellation_medium">中度</string>
     <string name="noise_cancellation_deep">深度</string>
+    <string name="noise_cancellation_strong">强</string>
     <string name="transparency_title">通透</string>
     <string name="transparency_vocal_enhancement">人声增强</string>
     <string name="transparency_vocal_enhancement_summary">在通透模式下增强人声</string>

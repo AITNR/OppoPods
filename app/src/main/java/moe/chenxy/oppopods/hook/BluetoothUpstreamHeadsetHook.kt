@@ -14,6 +14,7 @@ import android.os.Parcel
 import java.lang.reflect.Method
 import moe.chenxy.oppopods.BuildConfig
 import moe.chenxy.oppopods.config.ConfigManager
+import moe.chenxy.oppopods.pods.BleController
 import moe.chenxy.oppopods.pods.RfcommController
 import moe.chenxy.oppopods.utils.miuiStrongToast.data.BatteryParams
 import moe.chenxy.oppopods.utils.miuiStrongToast.data.OppoPodsAction
@@ -610,8 +611,14 @@ class BluetoothUpstreamHeadsetHook : HookContext() {
         if (device == null) return false
         val address = runCatching { device.address }.getOrNull()
         val name = runCatching { device.name ?: device.alias }.getOrNull().orEmpty()
-        val result = name.contains("oppo", ignoreCase = true) || (address != null && isOppoAddress(address))
-        if (result && address != null) knownOppoAddresses.add(address.uppercase())
+        val result = name.contains("oppo", ignoreCase = true) ||
+                BleController.isRogCetra(device) ||
+                (address != null && isOppoAddress(address))
+        if (result && address != null) {
+            knownOppoAddresses.add(address.uppercase())
+            currentAddress = address
+            currentName = name
+        }
         return result
     }
 
@@ -655,30 +662,59 @@ class BluetoothUpstreamHeadsetHook : HookContext() {
     }
 
     private fun realRefreshPayload(): String {
-        val localSnapshot = runCatching { RfcommController.currentStatusSnapshot() }
+        // Try RfcommController first (for OPPO devices)
+        val rfcommSnapshot = runCatching { RfcommController.currentStatusSnapshot() }
             .getOrNull()
             ?.takeIf { it.address != null || it.battery != null }
-        val battery = localSnapshot?.battery ?: currentBattery
+        // Fall back to BleController (for BLE RACE devices like ROG Cetra)
+        val isBle = rfcommSnapshot == null
+        val bleSnapshot = if (isBle) {
+            runCatching { BleController.currentStatusSnapshot() }
+                .getOrNull()
+                ?.takeIf { it.address != null || it.battery != null }
+        } else null
+
+        val hasSnapshot = rfcommSnapshot != null || bleSnapshot != null
+        val snapshotBattery = rfcommSnapshot?.battery ?: bleSnapshot?.battery
+        val battery = snapshotBattery ?: currentBattery
         val anc = currentAnc
-        if (!hasTransparencyVocalEnhancementState && localSnapshot != null) {
-            currentTransparencyVocalEnhancement = localSnapshot.transparencyVocalEnhancement
+
+        if (!hasTransparencyVocalEnhancementState && hasSnapshot) {
+            currentTransparencyVocalEnhancement =
+                rfcommSnapshot?.transparencyVocalEnhancement
+                    ?: bleSnapshot?.transparencyVocalEnhancement
+                    ?: currentTransparencyVocalEnhancement
             hasTransparencyVocalEnhancementState = true
         }
         val transparencyVocalEnhancement = if (hasTransparencyVocalEnhancementState) {
             currentTransparencyVocalEnhancement
         } else {
-            localSnapshot?.transparencyVocalEnhancement ?: currentTransparencyVocalEnhancement
+            rfcommSnapshot?.transparencyVocalEnhancement
+                ?: bleSnapshot?.transparencyVocalEnhancement
+                ?: currentTransparencyVocalEnhancement
         }
-        localSnapshot?.address?.let {
+
+        val snapshotAddress = rfcommSnapshot?.address ?: bleSnapshot?.address
+        snapshotAddress?.let {
             currentAddress = it
             knownOppoAddresses.add(it.uppercase())
         }
-        localSnapshot?.deviceName?.let { currentName = it }
-        return RfcommController.miuiRefreshPayload(battery, anc, transparencyVocalEnhancement)
+        val snapshotName = rfcommSnapshot?.deviceName ?: bleSnapshot?.deviceName
+        snapshotName?.let { currentName = it }
+
+        return if (isBle && bleSnapshot != null) {
+            BleController.miuiRefreshPayload(battery, anc, transparencyVocalEnhancement)
+        } else {
+            RfcommController.miuiRefreshPayload(battery, anc, transparencyVocalEnhancement)
+        }
     }
 
     private fun effectiveBattery(): BatteryParams? {
-        return runCatching { RfcommController.currentStatusSnapshot().battery }.getOrNull() ?: currentBattery
+        val rfcommBattery = runCatching { RfcommController.currentStatusSnapshot().battery }.getOrNull()
+        if (rfcommBattery != null) return rfcommBattery
+        val bleBattery = runCatching { BleController.currentStatusSnapshot().battery }.getOrNull()
+        if (bleBattery != null) return bleBattery
+        return currentBattery
     }
 
     private fun displayBattery(params: PodParams?): Int? {
@@ -752,6 +788,7 @@ class BluetoothUpstreamHeadsetHook : HookContext() {
         runCatching {
             if (packageName == "com.android.bluetooth") {
                 RfcommController.queryStatus()
+                BleController.queryStatus()
             } else {
                 context?.sendBroadcast(Intent(OppoPodsAction.ACTION_REFRESH_STATUS).apply {
                     setPackage("com.android.bluetooth")

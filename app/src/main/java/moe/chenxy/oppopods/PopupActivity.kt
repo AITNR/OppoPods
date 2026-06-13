@@ -36,10 +36,12 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import moe.chenxy.oppopods.pods.NoiseControlMode
 import moe.chenxy.oppopods.pods.detectDeviceCapabilities
+import moe.chenxy.oppopods.pods.isBleRaceDevice
 import moe.chenxy.oppopods.config.ConfigManager
 import moe.chenxy.oppopods.ui.AppLocale
 import moe.chenxy.oppopods.ui.AppTheme
 import moe.chenxy.oppopods.ui.components.AncSwitch
+import moe.chenxy.oppopods.ui.components.NcIntensityMode
 import moe.chenxy.oppopods.ui.components.PodStatus
 import moe.chenxy.oppopods.utils.miuiStrongToast.data.BatteryParams
 import moe.chenxy.oppopods.utils.miuiStrongToast.data.OppoPodsAction
@@ -175,6 +177,15 @@ private fun PopupContent(onMore: () -> Unit, onDone: () -> Unit) {
         spatialAudioOverride = appConfig.spatialAudioCapabilityOverride,
         spatialSoundSwitchOverride = appConfig.spatialSoundSwitchCapabilityOverride,
     )
+
+    // ROG Cetra uses 3 NC intensity levels (Light/Medium/Strong) instead of OPPO's 4
+    val isBleDevice = isBleRaceDevice(deviceName.value)
+    val rogNcModes = listOf(
+        NcIntensityMode(NoiseControlMode.NOISE_CANCELLATION_LIGHT, stringResource(R.string.noise_cancellation_light)),
+        NcIntensityMode(NoiseControlMode.NOISE_CANCELLATION_MEDIUM, stringResource(R.string.noise_cancellation_medium)),
+        NcIntensityMode(NoiseControlMode.NOISE_CANCELLATION_DEEP, stringResource(R.string.noise_cancellation_strong))
+    )
+    val ncModes = if (isBleDevice) rogNcModes else null
 
     val broadcastReceiver = remember {
         object : BroadcastReceiver() {
@@ -321,7 +332,8 @@ private fun PopupContent(onMore: () -> Unit, onDone: () -> Unit) {
                     onTransparencyVocalEnhancementChange = ::setTransparencyVocalEnhancement,
                     onMore = onMore,
                     onDone = { showDialog.value = false },
-                    adaptiveModeEnabled = capabilities.adaptiveSupported
+                    adaptiveModeEnabled = capabilities.adaptiveSupported,
+                    noiseCancellationModes = ncModes
                 )
             } else {
                 PortraitPopupBody(
@@ -334,7 +346,8 @@ private fun PopupContent(onMore: () -> Unit, onDone: () -> Unit) {
                     onTransparencyVocalEnhancementChange = ::setTransparencyVocalEnhancement,
                     onMore = onMore,
                     onDone = { showDialog.value = false },
-                    adaptiveModeEnabled = capabilities.adaptiveSupported
+                    adaptiveModeEnabled = capabilities.adaptiveSupported,
+                    noiseCancellationModes = ncModes
                 )
             }
         }
@@ -352,7 +365,8 @@ private fun PortraitPopupBody(
     onTransparencyVocalEnhancementChange: (Boolean) -> Unit,
     onMore: () -> Unit,
     onDone: () -> Unit,
-    adaptiveModeEnabled: Boolean = true
+    adaptiveModeEnabled: Boolean = true,
+    noiseCancellationModes: List<NcIntensityMode>? = null
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Card(modifier = Modifier.fillMaxWidth()) {
@@ -368,7 +382,8 @@ private fun PortraitPopupBody(
                 onAncModeChange = onAncModeChange,
                 adaptiveModeEnabled = adaptiveModeEnabled,
                 transparencyVocalEnhancement = transparencyVocalEnhancement,
-                onTransparencyVocalEnhancementChange = onTransparencyVocalEnhancementChange
+                onTransparencyVocalEnhancementChange = onTransparencyVocalEnhancementChange,
+                noiseCancellationModes = noiseCancellationModes
             )
         }
         Spacer(modifier = Modifier.height(12.dp))
@@ -410,7 +425,8 @@ private fun LandscapePopupBody(
     onTransparencyVocalEnhancementChange: (Boolean) -> Unit,
     onMore: () -> Unit,
     onDone: () -> Unit,
-    adaptiveModeEnabled: Boolean = true
+    adaptiveModeEnabled: Boolean = true,
+    noiseCancellationModes: List<NcIntensityMode>? = null
 ) {
     Row(
         modifier = Modifier
@@ -440,7 +456,8 @@ private fun LandscapePopupBody(
                     compact = true,
                     adaptiveModeEnabled = adaptiveModeEnabled,
                     transparencyVocalEnhancement = transparencyVocalEnhancement,
-                    onTransparencyVocalEnhancementChange = onTransparencyVocalEnhancementChange
+                    onTransparencyVocalEnhancementChange = onTransparencyVocalEnhancementChange,
+                    noiseCancellationModes = noiseCancellationModes
                 )
             }
         }
